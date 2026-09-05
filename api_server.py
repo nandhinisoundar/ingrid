@@ -18,6 +18,14 @@ class IngridHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def do_GET(self):
+        if urlparse(self.path).path == "/ingrid_your_ingredient_decoded.html":
+            self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+            self.send_header("Location", "/")
+            self.end_headers()
+            return
+        super().do_GET()
+
     def do_POST(self):
         if urlparse(self.path).path != "/api/product":
             self.send_error(HTTPStatus.NOT_FOUND)
