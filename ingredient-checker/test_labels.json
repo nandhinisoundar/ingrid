@@ -1,0 +1,68 @@
+[
+  {
+    "id": "cookies_clean",
+    "text": "Ingredients: wheat flour, sugar, palm oil, salt, soy lecithin, ascorbic acid",
+    "expected": {
+      "wheat flour": "ok",
+      "sugar": "care",
+      "palm oil": "care",
+      "salt": "care",
+      "soy lecithin": "ok",
+      "ascorbic acid": "ok"
+    }
+  },
+  {
+    "id": "cookies_ocr_noise",
+    "text": "INGREDIENTS: WHEAT FL0UR, SUGAR, PALM 0IL, SALT, S0Y LECITHlN, ASC0RBIC ACID",
+    "expected": {
+      "wheat flour": "ok",
+      "sugar": "care",
+      "palm oil": "care",
+      "salt": "care",
+      "soy lecithin": "ok",
+      "ascorbic acid": "ok"
+    }
+  },
+  {
+    "id": "cola_enumbers",
+    "text": "Ingredients: carbonated water, E150d, aspartame, E211, citric acid, E950",
+    "expected": {
+      "carbonated water": "ok",
+      "e150d": "care",
+      "aspartame": "care",
+      "e211": "care",
+      "citric acid": "ok",
+      "e950": "care"
+    }
+  },
+  {
+    "id": "nested_brackets",
+    "text": "Ingredients: flour, raising agents (sodium bicarbonate, E503), emulsifier (soy lecithin)",
+    "expected": {
+      "flour": "ok",
+      "sodium bicarbonate": "ok",
+      "e503": "ok",
+      "soy lecithin": "ok"
+    }
+  },
+  {
+    "id": "contains_avoid",
+    "text": "Ingredients: pork, salt, sodium nitrite, titanium dioxide, BHA",
+    "expected": {
+      "salt": "care",
+      "sodium nitrite": "avoid",
+      "titanium dioxide": "avoid",
+      "bha": "avoid"
+    }
+  },
+  {
+    "id": "unknown_handling",
+    "text": "Ingredients: quinoa flour, baobab powder, sugar, salt",
+    "expected": {
+      "quinoa flour": "unknown",
+      "baobab powder": "unknown",
+      "sugar": "care",
+      "salt": "care"
+    }
+  }
+]
