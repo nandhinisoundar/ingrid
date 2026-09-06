@@ -1,0 +1,1 @@
+-r ingredient-checker/requirements.txt

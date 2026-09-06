@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
@@ -15,6 +16,7 @@ load_dotenv()
 
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 PRODUCT_INDEX_NAME = os.getenv("PINECONE_PRODUCT_INDEX", "ingrid-beverages")
+OPENFOODFACTS_API_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
 VALID_VERDICTS = {"ok", "care", "avoid", "unknown"}
 BANNED_PHRASES = [
     "cures", "will prevent", "treats your", "safe for you",
@@ -67,6 +69,13 @@ def _extract_additives_and_highlights(metadata):
     }
 
 
+def _dedupe_ingredients_text(text):
+    """Collapse repeated identical segments in a semicolon-joined ingredients string."""
+    segments = [segment.strip() for segment in str(text or "").split(";")]
+    deduped = list(dict.fromkeys(segment for segment in segments if segment))
+    return "; ".join(deduped)
+
+
 def lookup_pinecone_barcode(barcode):
     """Fetch a product from Pinecone using its exact barcode vector ID."""
     code = str(barcode).strip()
@@ -86,12 +95,59 @@ def lookup_pinecone_barcode(barcode):
     if not vector:
         return None
 
-    metadata = vector.metadata or {}
+    metadata = dict(vector.metadata or {})
+    metadata["ingredients_text"] = _dedupe_ingredients_text(metadata.get("ingredients_text", ""))
     return {
         "details": metadata,
-        "ingredients_text": metadata.get("ingredients_text", ""),
+        "ingredients_text": metadata["ingredients_text"],
         "nutrition": _extract_nutrition(metadata.get("text", "")),
         "source": f"Pinecone: {PRODUCT_INDEX_NAME}",
+    }
+
+
+def lookup_openfoodfacts_barcode(barcode):
+    """Fetch a product from the OpenFoodFacts API when it is missing from Pinecone."""
+    code = str(barcode).strip()
+    if not re.fullmatch(r"\d{8,14}", code):
+        return None
+
+    try:
+        response = requests.get(
+            OPENFOODFACTS_API_URL.format(code=code),
+            timeout=10,
+            headers={"User-Agent": "Ingrid-Ingredient-Checker/1.0 (contact@example.com)"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        return None
+
+    if payload.get("status") != 1:
+        return None
+
+    product = payload.get("product") or {}
+    nutriments = product.get("nutriments") or {}
+    nutrition = {}
+    for key, value in nutriments.items():
+        if not key.endswith("_100g") or value is None:
+            continue
+        name = key[: -len("_100g")]
+        nutrition[name] = {"value": value, "unit": nutriments.get(f"{name}_unit", "")}
+
+    metadata = dict(product)
+    metadata["categories_tags"] = ";".join(product.get("categories_tags") or [])
+    combined_tags = (product.get("ingredients_tags") or []) + (product.get("additives_tags") or [])
+    metadata["ingredients_tags"] = ";".join(dict.fromkeys(combined_tags))
+    ingredients_text = _dedupe_ingredients_text(
+        product.get("ingredients_text") or product.get("ingredients_text_en", "")
+    )
+    metadata["ingredients_text"] = ingredients_text
+
+    return {
+        "details": metadata,
+        "ingredients_text": ingredients_text,
+        "nutrition": nutrition,
+        "source": "OpenFoodFacts API",
     }
 
 
@@ -162,13 +218,13 @@ def check_output(text):
 def analyse_label(source, skip_llm=False):
     """Fetch barcode product details and generate LLM ingredient verdicts."""
     barcode = read_barcode(source)
-    product_record = lookup_pinecone_barcode(barcode)
+    product_record = lookup_pinecone_barcode(barcode) or lookup_openfoodfacts_barcode(barcode)
     if not product_record:
         return {
             "ingredients": [], "verdicts": {}, "matches": {}, "unknowns": [],
             "product": None, "nutriscore_grade": None, "nutrition": {},
             "additives_highlights": {"additives": [], "highlights": []},
-            "explanation": f"Barcode {barcode or 'not detected'} was not found in the Pinecone product index.",
+            "explanation": f"Barcode {barcode or 'not detected'} was not found in Pinecone or OpenFoodFacts.",
             "violations": [], "external_source": None,
         }
 

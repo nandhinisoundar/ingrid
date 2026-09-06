@@ -1,9 +1,14 @@
 """Ingrid Streamlit interface."""
 
 import tempfile
+import os
 
 import streamlit as st
 from PIL import Image
+
+for secret_name in ("PINECONE_API_KEY", "OPENAI_API_KEY"):
+    if secret_name in st.secrets and not os.getenv(secret_name):
+        os.environ[secret_name] = st.secrets[secret_name]
 
 from barcode_detector import extract_text
 from chain import analyse_label
